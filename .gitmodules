@@ -1,0 +1,9 @@
+[submodule "third_party/sound-autodaq"]
+	path = third_party/sound-autodaq
+	url = https://github.com/regx64/sound-autodaq
+[submodule "third_party/meligation"]
+	path = third_party/meligation
+	url = https://github.com/aworse/meligation
+[submodule "third_party/classism"]
+	path = third_party/classism
+	url = https://github.com/regx64/classism

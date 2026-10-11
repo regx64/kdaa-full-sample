@@ -1,0 +1,10 @@
+# kdaa orchestrator + the three pinned repos (third_party/*/requirements.txt)
+numpy>=1.26
+PyYAML>=6.0
+jsonschema>=4
+matplotlib
+pytest>=7.4
+sounddevice>=0.4.6   # sound-autodaq (imported only when recording)
+pynput>=1.7          # sound-autodaq keyboard hook
+torch>=2.2           # classism training; CPU wheels: pip install torch --index-url https://download.pytorch.org/whl/cpu
+# int8 export (optional, export.enabled: auto): pip install -r third_party/classism/requirements-export.txt

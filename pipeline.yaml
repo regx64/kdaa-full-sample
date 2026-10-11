@@ -1,0 +1,35 @@
+# KDAA pipeline (python -m kdaa run). Relative paths resolve against this file's directory.
+paths:
+  raw: data/raw            # sound-autodaq output.root: <raw>/<participant>/<scenario>/<session>/
+  work: work               # labels/ audio/ mel/ mel_packed/ state/ check.json
+  runs: runs               # one directory per training run
+
+repos:                     # git submodules, pinned (git submodule update --init)
+  sound_autodaq: third_party/sound-autodaq
+  meligation: third_party/meligation
+  classism: third_party/classism
+
+sessions:
+  include_incomplete: false   # true: also use sessions still being recorded (their valid trials so far)
+
+gates:
+  max_skip_rate: 0.01      # a session whose mel skipped more of its clips than this is held out
+  min_sessions: 3          # classism's session split needs a train, a val and a test session
+  require_coverage: false  # true: stop before training when per-jamo coverage (spec §7) is short
+
+pack:
+  remove_clip_npy: false   # true: delete mel/<clip_id>.npy once packed into mel_packed/<session>.npz
+
+classism:
+  config: null             # classism YAML; null = third_party/classism/configs/afe.yaml
+  epochs: null             # null = classism config (30)
+  split: null              # session | participant | random; null = classism config (session)
+  device: cpu              # cpu | cuda
+
+evaluate:
+  split: test
+
+export:
+  enabled: auto            # auto: int8 export when onnx/tensorflow/onnx2tf are installed; true: required; false: skip
+
+python: null               # interpreter for stage subprocesses; null = the one running kdaa
