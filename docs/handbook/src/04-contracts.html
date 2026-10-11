@@ -1,0 +1,182 @@
+
+<section class="chapter" id="contracts">
+  <div class="ch-head">
+    <p class="eyebrow">2장</p>
+    <h2 class="ch-title">데이터 계약</h2>
+    <p class="ch-lede">저장소 사이에는 함수 호출 대신 파일이 오갑니다. 아래 형식이 바뀌면 받는 쪽이 에러를 낼 수도 있지만, 더 나쁜 경우에는 에러 없이 틀린 모델이 나옵니다. 수정하기 전에 이 장에서 영향 범위를 먼저 확인하세요.</p>
+  </div>
+
+  <section class="doc-sec" id="contracts-map">
+    <h2>계약 지도</h2>
+    <div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>계약</th><th>만드는 쪽 → 읽는 쪽</th><th>정의 위치</th><th>깨지면</th></tr></thead>
+          <tbody>
+            <tr><th><a href="#contracts-audio">오디오 형식</a></th><td>sound-autodaq → meligation</td><td class="mono">sound-autodaq/classism/spec.md</td><td>meligation이 WAV 로드에서 거부 (PCM16·48 kHz 아님)</td></tr>
+            <tr><th><a href="#contracts-labels">38개 기호</a></th><td>sound-autodaq, classism (사본 2개)</td><td class="mono">classism/src/labels.py<br>sound-autodaq/classism/labels.py</td><td>클래스 번호가 어긋나 조용히 다른 키로 학습</td></tr>
+            <tr><th><a href="#contracts-export">라벨 CSV</a></th><td>sound-autodaq → meligation, classism</td><td class="mono">export_classism.py · classism dataset.py</td><td>로더가 열 누락으로 거부, clip_id가 어긋나면 npy를 못 찾음</td></tr>
+            <tr><th><a href="#contracts-regime">로그멜 규격</a></th><td>meligation → classism (학습), 펌웨어 (배포)</td><td class="mono">classism/src/melio.py Regime<br>meligation/code Regime</td><td>param_hash 불일치로 거부. 해시가 같은데 구현이 다르면 조용히 정확도 하락</td></tr>
+            <tr><th><a href="#contracts-mel">Mel 파일</a></th><td>meligation → kdaa(묶기) → classism</td><td class="mono">classism/src/dataset.py docstring</td><td>클립 누락, 형식 오류로 거부</td></tr>
+            <tr><th><a href="#contracts-overlay">classism 설정 덮어쓰기</a></th><td>kdaa → classism</td><td class="mono">kdaa/stages.py classism_config_text</td><td>엉뚱한 세션으로 학습, 빠진 클립에서 실패</td></tr>
+            <tr><th><a href="#contracts-afe">kdaa.afe.v1</a></th><td>classism → LM 서버</td><td class="mono">classism/schemas/kdaa_afe_v1.schema.json</td><td>LM 서버가 문서를 거부</td></tr>
+            <tr><th><a href="#contracts-deploy">int8 입력 양자화</a></th><td>classism → Mel 펌웨어</td><td class="mono">export/deployment.json<br>handoff/mel_int8_input.json</td><td>온디바이스 입력 스케일이 어긋나 정확도 붕괴</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-audio">
+    <h2>오디오 형식</h2>
+    <div>
+      <div class="code"><span class="label">sound-autodaq/classism/spec.md</span><pre>sample_rate  : 48000 Hz
+channels     : 1 (mono)
+bit_depth    : 16-bit signed linear PCM</pre></div>
+      <p>sound-autodaq는 녹음 전에 장치가 48 kHz를 그대로 지원하는지 확인하고, 소프트웨어 리샘플링을 하지 않습니다(<code>recording.allow_resample: false</code>). meligation의 <code>load_wav_float</code>는 PCM16이 아니거나 샘플레이트가 다르면 그 클립을 건너뛰고 이유를 <code>_skipped_&lt;session&gt;.csv</code>에 남깁니다. 스테레오가 들어오면 채널 평균으로 모노를 만듭니다.</p>
+      <p>keypress 녹음(기준 설정)에서는 WAV 하나가 <code>pre_roll_ms + post_roll_ms</code> = 1.0 s이고, 타건은 정확히 0.5 s 지점에 있습니다. Mel은 그중 0.495 ~ 0.595 s의 100 ms만 씁니다. 나머지 앞뒤 여유는 시작점 재정렬과 데이터 변형에 쓰려고 남겨 둔 것입니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-labels">
+    <h2>38개 기호</h2>
+    <div>
+      <p>분류기 출력은 한 줄로 늘어선 38개 클래스입니다. 순서가 곧 클래스 번호라서 두 사본의 순서가 같아야 합니다. sound-autodaq 쪽 사본에는 <code>CLASS_DEFINITION_VERSION = "classism-afe-38@c6606a0"</code>이 붙어 있고, 녹음할 때 <code>schedule.json</code>과 <code>session.json</code>에 기록됩니다. 클래스 정의가 바뀐 상태로 세션을 이어 녹음하려 하면 resume이 거부됩니다.</p>
+      <h3>자음 14 · 된소리 5 (Shift)</h3>
+      <div class="symbols">
+        <span>ㄱ<small>r</small></span><span>ㄴ<small>s</small></span><span>ㄷ<small>e</small></span><span>ㄹ<small>f</small></span><span>ㅁ<small>a</small></span><span>ㅂ<small>q</small></span><span>ㅅ<small>t</small></span><span>ㅇ<small>d</small></span><span>ㅈ<small>w</small></span><span>ㅊ<small>c</small></span><span>ㅋ<small>z</small></span><span>ㅌ<small>x</small></span><span>ㅍ<small>v</small></span><span>ㅎ<small>g</small></span>
+        <span>ㄲ<small>⇧r</small></span><span>ㄸ<small>⇧e</small></span><span>ㅃ<small>⇧q</small></span><span>ㅆ<small>⇧t</small></span><span>ㅉ<small>⇧w</small></span>
+      </div>
+      <h3>모음 12 · Shift 모음 2</h3>
+      <div class="symbols">
+        <span>ㅏ<small>k</small></span><span>ㅐ<small>o</small></span><span>ㅑ<small>i</small></span><span>ㅓ<small>j</small></span><span>ㅔ<small>p</small></span><span>ㅕ<small>u</small></span><span>ㅗ<small>h</small></span><span>ㅛ<small>y</small></span><span>ㅜ<small>n</small></span><span>ㅠ<small>b</small></span><span>ㅡ<small>m</small></span><span>ㅣ<small>l</small></span>
+        <span>ㅒ<small>⇧o</small></span><span>ㅖ<small>⇧p</small></span>
+      </div>
+      <h3>특수 토큰 5</h3>
+      <div class="symbols">
+        <span class="sp">&lt;sp&gt;<small>Space</small></span><span class="sp">&lt;bs&gt;<small>Backspace</small></span><span class="sp">&lt;shift&gt;<small>Shift 단독</small></span><span class="sp">&lt;caps&gt;<small>CapsLock</small></span><span class="sp">&lt;other&gt;<small>그 밖의 키</small></span>
+      </div>
+      <p>번호 순서는 위 표 그대로입니다: 자음 14, 된소리 5, 모음 12, Shift 모음 2(=자모 33, 번호 0~32), 그다음 <code>&lt;sp&gt; &lt;bs&gt; &lt;shift&gt; &lt;caps&gt; &lt;other&gt;</code>(33~37). 키 아래 글자는 두벌식에서 그 자모를 내는 물리 키이고, ⇧는 Shift와 함께 누른다는 뜻입니다. 된소리와 ㅒ·ㅖ의 Shift는 같은 타건의 일부로 보고 따로 세지 않습니다.</p>
+      <p><code>&lt;other&gt;</code>는 classism에 정의가 없어서 sound-autodaq가 정했습니다. 자모 키, Space, Backspace, Shift, CapsLock, 운영자 숫자키가 아닌 모든 키입니다. 녹음할 때는 반복마다 Enter, Tab, <code>, . / ; ' [ ] - =</code>를 돌아가며 시킵니다.</p>
+      <p>라벨 CSV에서 기호는 <code>keytype</code>과 <code>jamo</code> 두 열로 표현됩니다. <code>keytype=normal</code>이면 <code>jamo</code>가 자모, 아니면 keytype이 특수 토큰을 정합니다(<code>classism/src/labels.py: symbol_of</code>). sound-autodaq export는 특수키 행의 <code>jamo</code> 열에도 <code>&lt;sp&gt;</code> 같은 토큰을 적지만 classism은 무시합니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-export">
+    <h2>라벨 CSV<small>work/labels/&lt;session_uid&gt;.csv</small></h2>
+    <div>
+      <p>sound-autodaq의 <code>--export-classism</code>이 세션 하나당 CSV 하나를 씁니다. 파일 이름(확장자 제외)이 classism의 <code>session_id</code>입니다. <code>valid</code> 상태의 trial만 행이 됩니다.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>열</th><th>값</th><th>읽는 곳</th></tr></thead>
+          <tbody>
+            <tr><th class="mono">onset_s</th><td>세션 시작부터 타건까지 초(소수 3자리). 이어 녹음해도 벽시계 기준이라 끊기지 않음</td><td>classism (필수)</td></tr>
+            <tr><th class="mono">jamo</th><td>자모. 특수키 행에는 토큰이 들어가지만 classism은 무시</td><td>classism (필수)</td></tr>
+            <tr><th class="mono">keytype</th><td><code>normal space backspace shift caps other</code></td><td>classism (필수)</td></tr>
+            <tr><th class="mono">shift</th><td>ㄲㄸㅃㅆㅉㅒㅖ와 <code>&lt;shift&gt;</code>면 1</td><td>classism (필수, 현재 학습에는 미사용)</td></tr>
+            <tr><th class="mono">scenario</th><td>설정의 scenario.id (예: S01)</td><td>classism (필수, 시나리오별 정확도)</td></tr>
+            <tr><th class="mono">participant</th><td>설정의 participant.id</td><td>classism (필수, 참가자 분할·coverage)</td></tr>
+            <tr><th class="mono">clip_id</th><td><code>&lt;session_uid&gt;_&lt;trial_id:08d&gt;</code></td><td>meligation, classism, kdaa</td></tr>
+            <tr><th class="mono">wav_onset_s</th><td>WAV 안에서 타건 위치(초, 소수 4자리)</td><td>meligation (필수)</td></tr>
+            <tr><th class="mono">onset_source</th><td><code>keystroke</code> 또는 키 감지 없이 녹음했을 때 <code>prompt</code></td><td>참고용</td></tr>
+            <tr><th class="mono">trial_id · observed_key</th><td>원본 trial 번호, 실제 눌린 키 이름</td><td>참고용</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>classism은 <code>clip_id</code> 열이 없으면 <code>&lt;session_id&gt;_&lt;row:05d&gt;</code>를 씁니다. sound-autodaq는 항상 <code>clip_id</code>를 쓰므로 이 규칙은 classism의 합성 데이터(<code>src.synth</code>)에서만 쓰입니다. WAV는 <code>work/audio/&lt;clip_id&gt;.wav</code>로 하드링크되어(같은 디스크가 아니면 복사) 원본을 두 벌 갖지 않습니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-regime">
+    <h2>로그멜 규격과 param_hash</h2>
+    <div>
+      <p>학습할 때와 ESP32에서 추론할 때 똑같은 파라미터와 구현으로 로그멜을 만들어야 합니다. 값은 classism <code>spec.md</code> §3.1에 고정되어 있습니다.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>값</th><th>classism 필드</th><th>meligation 필드</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">48000 Hz</td><td class="mono">sample_rate</td><td class="mono">sample_rate</td></tr>
+            <tr><td class="mono">1024</td><td class="mono">n_fft</td><td class="mono">n_fft</td></tr>
+            <tr><td class="mono">384 샘플 (8 ms)</td><td class="mono">win_samples</td><td class="mono">win_length</td></tr>
+            <tr><td class="mono">96 샘플 (2 ms)</td><td class="mono">hop_samples</td><td class="mono">hop_length</td></tr>
+            <tr><td class="mono">64, 200~20000 Hz</td><td class="mono">n_mels, fmin, fmax</td><td class="mono">n_mels, fmin, fmax</td></tr>
+            <tr><td class="mono">onset −5 ms ~ +95 ms</td><td class="mono">onset_pre_ms=5, clip_ms=100</td><td class="mono">pre_ms=5.0, post_ms=95.0</td></tr>
+            <tr><td class="mono">48 프레임</td><td class="mono">frames</td><td class="mono">frames</td></tr>
+            <tr><td class="mono">log(mel + 1e-6)</td><td class="mono">log_eps</td><td class="mono">log_eps</td></tr>
+            <tr><td class="mono">클립별 z-score, float32</td><td class="mono">normalization, dtype</td><td>(코드에 고정)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>param_hash는 <code>Regime</code> 데이터클래스를 <code>json.dumps(asdict(r), sort_keys=True, separators=(",", ":"))</code>로 만든 뒤 sha256 앞 8자리를 딴 값입니다. 필드 <em>이름</em>까지 해시에 들어가므로, 값이 모두 같아도 두 저장소의 해시가 다릅니다.</p>
+      <dl class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:1.5rem">
+        <div><dt>915acee6</dt><dd>classism <code>REGIME.param_hash()</code>. 학습이 받아들이는 값</dd></div>
+        <div><dt>5711c12b</dt><dd>meligation 자체 해시. 이름이 달라서 생기는 차이(B1)</dd></div>
+      </dl>
+      <p style="margin-top:1.5rem">지금은 kdaa의 <code>mel_shim.py</code>가 두 Regime의 값을 항목별로 비교해 모두 같을 때만 <code>_meta.json</code>에 classism 해시를 적습니다. 값이 하나라도 다르면 Mel 단계에서 멈춥니다. 정식 해결은 meligation이 classism과 같은 필드 구성으로 해시를 만드는 것입니다(<a href="#recipe-mel-fix">작업 가이드</a>).</p>
+      <div class="callout warn"><b>해시가 막지 못하는 것</b>해시는 파라미터 값만 봅니다. 창 함수, 패딩 방식, mel 필터뱅크 공식처럼 구현이 바뀌면 해시는 그대로인데 결과 텐서가 달라집니다. meligation의 추출 코드를 고쳤다면 <code>mel_spec_version</code>을 올리고 학습 데이터를 다시 만들어야 합니다.</div>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-mel">
+    <h2>Mel 파일<small>work/mel, work/mel_packed</small></h2>
+    <div>
+      <dl class="pairs">
+        <dt>mel/&lt;clip_id&gt;.npy</dt><dd>float32 (64, 48), 클립별 z-score까지 끝난 최종 텐서. classism은 (1, 64, 48)도 받습니다.</dd>
+        <dt>mel/_meta.json</dt><dd><code>mel_spec_version</code>("1.0"), <code>param_hash</code>, <code>sample_rate</code>, <code>n_mels</code>, <code>frames</code>, <code>regime</code>. kdaa shim이 쓰면 <code>meligation_param_hash</code>, <code>param_hash_source</code>("kdaa-shim" 또는 "meligation")가 더 붙습니다.</dd>
+        <dt>mel/_skipped_&lt;session&gt;.csv</dt><dd><code>clip_id,reason</code>. 100 ms 창이 WAV 밖으로 나가거나 WAV를 읽지 못한 클립. 건너뛴 클립이 없으면 파일을 지웁니다.</dd>
+        <dt>mel_packed/&lt;session&gt;.npz</dt><dd><code>logmel</code> (N, 64, 48) float32, <code>clip_id</code> (N,) 문자열, <code>param_hash</code>, <code>mel_spec_version</code>, <code>session_id</code>. CSV 순서를 따르고 건너뛴 클립은 빠집니다. <code>allow_pickle=False</code>로 읽을 수 있어야 합니다.</dd>
+      </dl>
+      <p>classism은 세션마다 shard가 있으면 shard를, 없으면 npy를 읽습니다. 해시는 shard 헤더를 먼저 보고, 없으면 <code>_meta.json</code>을 봅니다. shard 쓰기는 kdaa(<code>kdaa/pack.py</code>), 읽기는 classism(<code>src/dataset.py: read_shard</code>)이 맡고, 둘이 맞는지는 kdaa의 <code>tests/test_pack.py</code>가 classism CLI를 실제로 돌려 확인합니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-overlay">
+    <h2>classism 설정 덮어쓰기</h2>
+    <div>
+      <p>kdaa는 학습할 때마다 classism 기본 설정(<code>configs/afe.yaml</code>, 또는 <code>pipeline.yaml</code>의 <code>classism.config</code>)에 아래 세 값을 덮어쓴 YAML을 <code>runs/&lt;id&gt;/classism_config.yaml</code>로 저장하고, 학습·평가·export 모두 <code>--config</code>로 넘깁니다.</p>
+      <div class="code"><span class="label">runs/&lt;id&gt;/classism_config.yaml (일부)</span><pre>data:
+  min_per_jamo: 25
+  min_per_special: 25
+  sessions: [P01_S01_SESSION01, P01_S01_SESSION02, P02_S01_SESSION01]   <span class="c"># 보류 세션 제외</span>
+  on_missing_mel: drop          <span class="c"># Mel이 건너뛴 행은 빼고 개수만 보고</span>
+  require_param_hash: true      <span class="c"># 해시 정보가 없는 세션도 거부</span></pre></div>
+      <p>classism 쪽 기본값은 <code>sessions: null</code>(모든 CSV), <code>on_missing_mel: error</code>, <code>require_param_hash: false</code>입니다. classism을 단독으로 쓸 때는 예전처럼 동작합니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-afe">
+    <h2>kdaa.afe.v1<small>분류기 → LM 서버</small></h2>
+    <div>
+      <div class="code"><span class="label">json</span><pre>{
+  "schema": "kdaa.afe.v1",
+  "sample_rate": 48000,
+  "session_id": "p1_near_s0",
+  "lang": "ko",
+  "tokens": [
+    { "idx": 0, "onset_s": 1.234, "keytype": "normal",
+      "alts": [ {"jamo": "ㄱ", "p": 0.72}, {"jamo": "ㄷ", "p": 0.16}, {"jamo": "ㅋ", "p": 0.12} ] },
+    { "idx": 1, "onset_s": 1.402, "keytype": "space",
+      "alts": [ {"jamo": "&lt;sp&gt;", "p": 1.0} ] }
+  ],
+  "meta": { "model_id": "smallcnn-int8-v1", "topN": 5, "input_shape": [1, 64, 48], "calibrated": true }
+}</pre></div>
+      <ul class="plain">
+        <li><code>tokens</code>는 타건 하나에 하나, 시간 순, <code>idx</code>는 0부터 빈틈없이 이어집니다.</li>
+        <li><code>alts</code>는 확률 내림차순 상위 N개(기본 5)이고 합이 1이 되도록 다시 나눕니다(AC-9, 허용 오차 1e-6). 확률이 같으면 번호가 작은 클래스가 앞입니다.</li>
+        <li><code>keytype</code>은 1순위 기호에서 정해집니다. <code>onset_s</code>는 입력에서 그대로 옮깁니다.</li>
+        <li>분류기는 음절을 만들지 않습니다. 조합, 사전, 언어 모델은 LM 서버 몫입니다(설계 결정 D6).</li>
+      </ul>
+      <p>JSON Schema가 형식을, <code>src/schema.py: validate_document</code>가 스키마로 표현 못 하는 규칙(연속 idx, 확률 합)을 검사합니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="contracts-deploy">
+    <h2>int8 입력 양자화</h2>
+    <div>
+      <p>ESP32에서는 Mel 출력(float32 로그멜)을 int8로 바꿔서 CNN에 넣습니다. 그 변환에 쓰는 <code>scale</code>과 <code>zero_point</code>는 classism export가 정하고 Mel 펌웨어가 따라야 합니다.</p>
+      <div class="code"><span class="label">양자화 공식</span><pre>q = clip(round(x / scale) + zero_point, -128, 127)      <span class="c"># meligation code: quantize_int8</span>
+x ≈ (q - zero_point) × scale</pre></div>
+      <p>값은 <code>runs/&lt;id&gt;/export/deployment.json</code>의 <code>quantization.input</code>에 있고, kdaa가 같은 내용을 <code>runs/&lt;id&gt;/handoff/mel_int8_input.json</code>으로 따로 꺼내 둡니다. 모델을 다시 export하면 값이 바뀔 수 있으므로 펌웨어도 같이 갱신해야 합니다.</p>
+    </div>
+  </section>
+</section>

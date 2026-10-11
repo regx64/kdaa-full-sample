@@ -1,0 +1,178 @@
+
+<section class="chapter k-kdaa" id="kdaa">
+  <div class="ch-head">
+    <p class="eyebrow"><i class="dot"></i>3장 · regx64/kdaa-full-sample</p>
+    <h2 class="ch-title">kdaa — 자동화</h2>
+    <p class="ch-lede">세 저장소를 순서대로 호출하고, 세션마다 무엇을 이미 처리했는지 기억하고, 단계 사이에서 데이터를 검사합니다. 계산은 거의 하지 않습니다. 대부분 다른 저장소를 부르는 코드입니다.</p>
+    <dl class="spec">
+      <div><dt>언어</dt><dd>Python 3.10+</dd></div>
+      <div><dt>진입점</dt><dd>python -m kdaa {run,status,watch}</dd></div>
+      <div><dt>의존성</dt><dd>numpy, PyYAML (+ 세 저장소의 의존성)</dd></div>
+      <div><dt>설정</dt><dd>pipeline.yaml</dd></div>
+      <div><dt>테스트</dt><dd>python -m pytest -q · 10개, 약 70초</dd></div>
+      <div><dt>CI</dt><dd>.github/workflows/tests.yml · Linux 3.10/3.13, Windows 3.12</dd></div>
+    </dl>
+  </div>
+
+  <section class="doc-sec" id="kdaa-files">
+    <h2>파일별 책임</h2>
+    <div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>파일</th><th>맡는 일</th><th>먼저 볼 것</th></tr></thead>
+          <tbody>
+            <tr><th class="mono">kdaa/stages.py</th><td>파이프라인 본체. 세션 탐색, 단계별 처리, 지문, 게이트, 학습 재사용 판단</td><td class="mono">Pipeline.run</td></tr>
+            <tr><th class="mono">kdaa/cli.py</th><td><code>run</code>, <code>status</code>, <code>watch</code> 명령과 종료 코드</td><td class="mono">main</td></tr>
+            <tr><th class="mono">kdaa/config.py</th><td><code>pipeline.yaml</code>을 기본값 위에 합치고, 상대 경로를 설정 파일 위치 기준으로 푼다</td><td class="mono">DEFAULTS, load_config</td></tr>
+            <tr><th class="mono">kdaa/mel_shim.py</th><td>meligation을 경로로 불러오고, Regime 값을 classism과 비교해 해시를 정한다(임시)</td><td class="mono">open_backend, regime_mismatches</td></tr>
+            <tr><th class="mono">kdaa/pack.py</th><td>세션의 npy를 shard 하나로 묶는다</td><td class="mono">pack_session</td></tr>
+            <tr><th class="mono">kdaa/report.py</th><td><code>report.md</code> 작성, 이전 완료 실행과 지표 비교</td><td class="mono">write_report, summarize</td></tr>
+            <tr><th class="mono">kdaa/util.py</th><td>해시, 원자적 JSON 쓰기, 파일 경로로 모듈 로드(바이트코드 안 씀), git 커밋 조회</td><td class="mono">load_module</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>코드를 처음 읽는다면 <code>stages.py</code>의 <code>Pipeline.run</code>부터 보세요. 단계 함수를 순서대로 부르는 80줄 정도의 함수라서, 여기서 각 <code>stage_*</code> 메서드로 따라 들어가면 전체가 보입니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="kdaa-stages">
+    <h2>단계별 동작</h2>
+    <div>
+      <p>1~3은 세션마다, 4 이후는 사용 가능한 세션 전체를 묶어서 한 번 실행합니다. "다시 하는 조건"이 거짓이면 그 단계는 건너뜁니다. <code>--force</code>는 1~3을, <code>--force-train</code>은 학습을 강제합니다.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>단계</th><th>하는 일 (실제 호출)</th><th>다시 하는 조건</th><th>보류·멈춤</th></tr></thead>
+          <tbody>
+            <tr><th>탐색</th><td><code>data/raw</code> 아래 <code>session.json</code>을 모두 찾음. <code>session_summary.json</code>의 <code>completed: true</code>면 완료 세션</td><td>매번</td><td>같은 uid가 두 곳에 있으면 멈춤(1). 미완료 세션은 보류</td></tr>
+            <tr><th>1 export</th><td><code>python -m experiments.recording --export-classism &lt;세션&gt; --out work</code> (cwd: sound-autodaq)</td><td>session.json, manifest.jsonl, session_summary.json 내용이나 sound-autodaq 커밋이 바뀜, 또는 CSV가 없음</td><td>export 실패 시 보류 (오류는 state에)</td></tr>
+            <tr><th>2 mel</th><td>meligation <code>build_session</code>을 같은 프로세스에서 호출, <code>_meta.json</code> 기록</td><td>export 지문, meligation 소스 파일, param_hash 중 하나가 바뀜</td><td>클립 0개, 또는 건너뛴 비율 &gt; <code>max_skip_rate</code>(1%)면 보류. Regime 값이 다르면 멈춤(1)</td></tr>
+            <tr><th>3 pack</th><td><code>pack_session</code> → <code>mel_packed/&lt;uid&gt;.npz</code></td><td>mel 지문이 바뀜, 또는 shard가 없음</td><td>형식이 틀린 npy, NaN/Inf면 예외</td></tr>
+            <tr><th>4 check</th><td><code>python -m src.dataset --config work/classism_config.yaml --json work/check.json</code> (cwd: classism)</td><td>매번</td><td>종료 코드 3(해시 불일치)이면 멈춤(1). 세션 수 &lt; <code>min_sessions</code>면 멈춤(2). coverage 부족은 참고용 표시(또는 멈춤)</td></tr>
+            <tr><th>5 train</th><td><code>python -m src.train --out runs/&lt;id&gt; --config runs/&lt;id&gt;/classism_config.yaml …</code></td><td>datahash가 같은 완료 실행이 없음</td><td>실패 시 run.json status=failed, 멈춤(1)</td></tr>
+            <tr><th>6 evaluate</th><td><code>python -m src.evaluate --ckpt runs/&lt;id&gt;/best.pt --split test</code></td><td>방금 학습했을 때</td><td>실패 시 멈춤(1)</td></tr>
+            <tr><th>7 export_int8</th><td>onnx, onnxruntime, onnx2tf, tensorflow가 있으면 <code>python -m src.export_esp32</code></td><td>방금 학습했을 때</td><td><code>export.enabled: true</code>인데 도구가 없으면 멈춤(1). <code>auto</code>면 건너뜀</td></tr>
+            <tr><th>8 report</th><td>run.json 완료 표시, <code>report.md</code> 작성</td><td>방금 학습했을 때</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>지문(fingerprint)</h3>
+      <div class="code"><span class="label">kdaa/stages.py</span><pre>export_fp = sha256(session.json, manifest.jsonl, session_summary.json, sound-autodaq 커밋)
+mel_fp    = sha256(export_fp, meligation 소스 파일 sha256, param_hash)
+pack_fp   = sha256(mel_fp, "pack-v1")
+datahash  = sha256(정렬된 (uid, pack_fp) 목록, classism_config.yaml 내용,
+                   pipeline.yaml의 classism 절, classism 커밋, param_hash)[:8]</pre></div>
+      <p>지문이 연쇄되어 있어서 export가 다시 돌면 mel과 pack도 따라 다시 돕니다. 다른 저장소의 커밋을 올리면 해당 단계부터 다시 처리됩니다. 학습 실행 디렉터리 이름 끝의 8자리가 datahash입니다.</p>
+      <h3>종료 코드</h3>
+      <ul class="plain">
+        <li><span class="pill ok">0</span> 완료, 또는 데이터가 그대로라 이전 실행 재사용</li>
+        <li><span class="pill warn">2</span> 게이트에서 멈춤. 세션이 모자라거나 coverage가 부족(설정한 경우). 실패가 아니라 "아직 할 수 없음"</li>
+        <li><span class="pill bad">1</span> 실패. 해시 불일치, export/학습/평가 오류, 도구 없음</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="kdaa-state">
+    <h2>상태 파일<small>work/state, runs/*/run.json</small></h2>
+    <div>
+      <p>세션별 진행 기록입니다. 지우면 그 세션은 처음부터 다시 처리됩니다. 손으로 고칠 일은 거의 없지만, 왜 어떤 세션이 보류됐는지 볼 때 엽니다.</p>
+      <div class="code"><span class="label">work/state/P01_S01_SESSION01.json</span><pre>{
+  "export": { "fp": "…", "clips": 38, "report": "Exported 38 clips of …", "at": "2026-10-11T11:26:01Z" },
+  "mel":    { "fp": "…", "rows": 38, "written": 38, "skipped": 0, "skip_rate": 0.0,
+              "param_hash": "915acee6", "hash_source": "kdaa-shim", "at": "…" },
+  "pack":   { "fp": "…", "clips": 38, "missing": 0, "at": "…" },
+  "held":   null
+}</pre></div>
+      <p><code>runs/&lt;id&gt;/run.json</code>은 학습 한 번의 기록입니다.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>필드</th><th>뜻</th></tr></thead>
+          <tbody>
+            <tr><th class="mono">status</th><td><code>training</code> → <code>complete</code>. 실패하면 <code>failed</code>(+ <code>error</code>), <code>--until</code>로 중간에 멈추면 <code>partial</code>. 재사용 판단은 <code>complete</code>만 봄</td></tr>
+            <tr><th class="mono">datahash · param_hash · commits</th><td>무엇으로 학습했는지. 세 저장소의 커밋이 남아 재현할 수 있음</td></tr>
+            <tr><th class="mono">sessions · n_clips · participants</th><td>세션별 클립 수, Mel에서 건너뛴 수, pack 지문</td></tr>
+            <tr><th class="mono">reference_only</th><td>coverage가 부족한 데이터로 학습했으면 true. 리포트 맨 위에 경고가 붙음</td></tr>
+            <tr><th class="mono">check</th><td>게이트 결과: 분할 방식, 그룹 수, 최소 그룹 수, coverage 통과 여부</td></tr>
+            <tr><th class="mono">metrics_summary</th><td>top1, top5, keytype_acc, ece, 시나리오별 값, AC 판정</td></tr>
+            <tr><th class="mono">export</th><td><code>disabled</code> / <code>skipped</code>(+ 이유) / <code>done</code>(+ AC-6 보고)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>같은 디렉터리에 classism이 쓴 <code>best.pt</code>, <code>last.pt</code>, <code>split.json</code>, <code>curves.json</code>, <code>model_summary.json</code>, <code>config_used.json</code>, <code>calibration.json</code>, <code>eval_test/</code>(metrics.json과 그림 4장), <code>export/</code>, 그리고 단계별 로그 <code>logs/train.log</code>, <code>evaluate.log</code>, <code>export.log</code>가 있습니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="kdaa-config">
+    <h2>pipeline.yaml</h2>
+    <div>
+      <p>파일이 없어도 아래 기본값으로 동작합니다. 상대 경로는 <code>pipeline.yaml</code>이 있는 디렉터리 기준입니다.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>키</th><th>기본값</th><th>뜻</th></tr></thead>
+          <tbody>
+            <tr><th class="mono">paths.raw</th><td class="mono">data/raw</td><td>sound-autodaq 출력 루트</td></tr>
+            <tr><th class="mono">paths.work</th><td class="mono">work</td><td>중간 산출물</td></tr>
+            <tr><th class="mono">paths.runs</th><td class="mono">runs</td><td>학습 실행 디렉터리</td></tr>
+            <tr><th class="mono">repos.*</th><td class="mono">third_party/…</td><td>세 저장소 위치. 다른 체크아웃을 쓰려면 여기를 바꿈</td></tr>
+            <tr><th class="mono">sessions.include_incomplete</th><td class="mono">false</td><td>녹음 중인 세션의 valid trial도 쓸지</td></tr>
+            <tr><th class="mono">gates.max_skip_rate</th><td class="mono">0.01</td><td>Mel이 건너뛴 클립 비율 상한. 넘으면 그 세션 보류</td></tr>
+            <tr><th class="mono">gates.min_sessions</th><td class="mono">3</td><td>분할에 필요한 최소 세션(또는 참가자) 수</td></tr>
+            <tr><th class="mono">gates.require_coverage</th><td class="mono">false</td><td>true면 coverage 부족 시 학습 전에 멈춤</td></tr>
+            <tr><th class="mono">pack.remove_clip_npy</th><td class="mono">false</td><td>묶은 뒤 npy를 지울지. 지우면 Mel 지문이 같아도 npy는 다시 생기지 않음</td></tr>
+            <tr><th class="mono">classism.config</th><td class="mono">null</td><td>classism 설정 YAML. null이면 classism의 configs/afe.yaml</td></tr>
+            <tr><th class="mono">classism.epochs</th><td class="mono">null</td><td>null이면 classism 설정(30)</td></tr>
+            <tr><th class="mono">classism.split</th><td class="mono">null</td><td>session · participant · random</td></tr>
+            <tr><th class="mono">classism.device</th><td class="mono">cpu</td><td>cuda로 바꾸면 GPU 학습</td></tr>
+            <tr><th class="mono">evaluate.split</th><td class="mono">test</td><td>평가할 분할</td></tr>
+            <tr><th class="mono">export.enabled</th><td class="mono">auto</td><td>auto · true · false</td></tr>
+            <tr><th class="mono">python</th><td class="mono">null</td><td>단계 하위 프로세스에 쓸 파이썬. null이면 kdaa를 돌리는 파이썬</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="kdaa-cli">
+    <h2>명령</h2>
+    <div>
+      <div class="code"><span class="label">bash</span><pre>python -m kdaa [--config pipeline.yaml] run [--until STAGE] [--force] [--force-train]
+python -m kdaa status
+python -m kdaa watch [--interval 600] [--until STAGE]</pre></div>
+      <dl class="pairs">
+        <dt>run --until</dt><dd><code>export mel pack check train evaluate export_int8 report</code> 중 하나에서 멈춥니다. 예를 들어 <code>--until check</code>는 학습 없이 데이터만 점검합니다.</dd>
+        <dt>status</dt><dd>세션마다 녹음 완료 여부, export 클립 수, Mel 작성/전체, 묶은 클립 수, 보류 이유와 최근 학습 5개를 보여 줍니다. 아무것도 바꾸지 않습니다.</dd>
+        <dt>watch</dt><dd>지정한 간격마다 <code>run</code>을 다시 부릅니다. 녹음이 끝난 세션이 생기면 그때 처리되고, 데이터가 그대로면 학습은 건너뜁니다. Ctrl+C로 멈춥니다.</dd>
+      </dl>
+      <p>하위 프로세스는 출력을 줄 단위로 화면에 흘려보내고, 학습·평가·export 출력은 <code>runs/&lt;id&gt;/logs/</code>에도 남깁니다. 하위 프로세스 환경에는 <code>PYTHONPATH</code>에 kdaa 루트, <code>PYTHONIOENCODING=utf-8</code>이 들어갑니다(Windows에서 한글 출력이 깨져 죽는 것을 막음).</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="kdaa-shim">
+    <h2>meligation 임시 보완</h2>
+    <div>
+      <p><code>kdaa/mel_shim.py</code>는 meligation의 두 문제를 meligation을 고치지 않고 우회합니다. meligation에 정식 수정이 들어오면 이 파일은 아무것도 하지 않게 되고, 그 뒤 지울 수 있습니다.</p>
+      <ol class="numbered">
+        <li><b>파일 이름(B2).</b> 소스가 확장자 없는 <code>code</code> 하나라 <code>import</code>가 안 됩니다. <code>SourceFileLoader</code>로 경로에서 직접 불러옵니다. <code>mel_build.py</code>가 생기면 그쪽을 먼저 씁니다. 모듈 이름에 경로 해시를 붙여 서로 다른 체크아웃을 섞지 않고, <code>__pycache__</code>를 남기지 않습니다.</li>
+        <li><b>해시(B1).</b> meligation 자체 해시가 classism과 같으면 그대로 씁니다. 다르면 <code>regime_mismatches</code>가 11개 값(샘플레이트, n_fft, 창, hop, mel 수, fmin, fmax, 프레임, log_eps, 앞 여유, 클립 길이)과 정규화·dtype을 비교하고, 모두 같을 때만 classism 해시를 기록합니다. 하나라도 다르면 <code>MelRegimeError</code> → Mel 단계 실패.</li>
+      </ol>
+      <p>추출 자체(<code>MelExtractor</code>, <code>build_session</code>)는 meligation 코드 그대로입니다. kdaa는 <code>_meta.json</code>만 다시 씁니다.</p>
+    </div>
+  </section>
+
+  <section class="doc-sec" id="kdaa-tests">
+    <h2>테스트</h2>
+    <div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>파일</th><th>확인하는 것</th></tr></thead>
+          <tbody>
+            <tr><th class="mono">test_mel_shim.py</th><td>고정된 meligation과 classism의 Regime 값이 같다. shim이 classism 해시를 기록한다. 값이 다르면 이름을 대며 거부한다</td></tr>
+            <tr><th class="mono">test_pack.py</th><td>shard가 CSV 순서를 지키고 빠진 클립을 뺀다. <b>classism CLI가 kdaa shard를 실제로 읽고</b>, 다른 해시면 종료 코드 3을 낸다</td></tr>
+            <tr><th class="mono">test_report.py</th><td>리포트가 이전 실행과 비교하고 AC 판정, int8 결과를 적는다</td></tr>
+            <tr><th class="mono">test_e2e.py</th><td>sound-autodaq 합성 세션 2개 → 세션 수 게이트에서 멈춤(2). 3번째 추가 → 그 세션만 처리하고 학습. 다시 실행 → 학습 재사용. 녹음 중 세션 → 보류. status 명령</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>conftest.py</code>의 <code>make_work</code>는 export와 Mel이 끝난 상태의 작업 디렉터리를 가짜로 만듭니다. 묶기나 classism 연동만 시험할 때 녹음을 건너뛸 수 있습니다. 합성 세션은 sound-autodaq의 테스트 도우미(<code>tests/test_keylog.py</code>의 <code>_config</code>, <code>_run</code>)로 만듭니다.</p>
+    </div>
+  </section>
+</section>
