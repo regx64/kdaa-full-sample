@@ -22,7 +22,7 @@ import yaml
 from . import __version__
 from .config import Config
 from .mel_shim import MelBackend, MelRegimeError, open_backend
-from .pack import pack_session
+from .pack import csv_clip_ids, pack_session
 from .report import summarize, write_report
 from .util import read_json, repo_commit, sha256_files, sha256_text, write_json
 
@@ -171,7 +171,10 @@ class Pipeline:
         b = self.backend
         fp = sha256_text(s.state["export"]["fp"], b.code_fingerprint, b.param_hash)
         prev = s.state.get("mel", {})
-        if self.force or prev.get("fp") != fp:
+        # remove_clip_npy deletes the .npy files once packed; if the shard is gone too, extract again
+        lost = not (self.work / "mel_packed" / f"{s.uid}.npz").exists() and not any(
+            (self.work / "mel" / f"{c}.npy").exists() for c in csv_clip_ids(self.work / "labels" / f"{s.uid}.csv"))
+        if self.force or prev.get("fp") != fp or lost:
             self.log(f"  mel {s.uid}")
             rows, written, skipped = b.build_session(self.work / "labels" / f"{s.uid}.csv", self.work)
             s.state["mel"] = {"fp": fp, "rows": rows, "written": written, "skipped": len(skipped),

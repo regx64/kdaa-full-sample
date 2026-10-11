@@ -69,6 +69,13 @@ def test_record_to_report(tmp_path, capsys):
     s2 = Pipeline(cfg).run()
     assert s2["trained"] is False and s2["run"] == s["run"]
 
+    # npy files removed after packing (pack.remove_clip_npy) and the shard lost: extracted again, not packed empty
+    for p in (tmp_path / "work" / "mel").glob(f"{a}_*.npy"):
+        p.unlink()
+    (tmp_path / "work" / "mel_packed" / f"{a}.npz").unlink()
+    Pipeline(cfg).run(until="pack")
+    assert read_json(tmp_path / "work" / "state" / f"{a}.json")["pack"]["clips"] == 38
+
     # a session still being recorded is held out
     (tmp_path / "data" / "P02" / "S01" / "SESSION01" / "session_summary.json").unlink()
     s3 = Pipeline(cfg).run(until="pack")
