@@ -436,4 +436,8 @@ def build(stamp: list[str]) -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stamp", nargs="*", default=[], help="record the current source sha in these notes files")
-    sys.exit(build(ap.parse_args().stamp))
+    ap.add_argument("--out", type=Path, help=f"output folder (default {OUT})")
+    args = ap.parse_args()
+    if args.out:
+        OUT = args.out.resolve()
+    sys.exit(build(args.stamp))

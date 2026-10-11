@@ -4,6 +4,7 @@
 
 ```bash
 python docs/handbook/build.py          # docs/handbook/site/ 생성
+python docs/handbook/build.py --out /tmp/site   # 다른 폴더에 생성 (여러 사람이 동시에 검사할 때)
 ```
 
 - 코드는 빌드할 때 저장소(kdaa 루트와 third_party/*)에서 그대로 읽습니다.
