@@ -115,7 +115,7 @@ meligation 연결 객체를 담을 자리입니다. 처음엔 None이고, Mel �
 - `stdout=subprocess.PIPE`: 출력을 이쪽에서 읽을 수 있게 연결.
 - `stderr=subprocess.STDOUT`: 에러 출력도 같은 통로로 합침.
 - `text=True, encoding="utf-8"`: 바이트가 아니라 글자로 받기.
-- `errors="replace"`: 깨진 글자가 있어도 죽지 않고 �로 바꿈.
+- `errors="replace"`: 깨진 글자가 있어도 죽지 않고 대체 기호(U+FFFD)로 바꿈.
 
 `Popen`은 프로그램이 끝나기를 기다리지 않고 바로 돌아옵니다. 그래서 아래에서 출력을 실시간으로 읽을 수 있습니다.
 @@ 107-112
