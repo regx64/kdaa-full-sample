@@ -88,7 +88,6 @@ REPOS = [
         ("experiments/recording/validator.py", "녹음된 세션 검사(읽기 전용)"),
         ("experiments/recording/export_classism.py", "세션을 classism 학습 형식으로 내보내기"),
         ("experiments/recording/engine.py", "세션 전체를 진행하는 본체"),
-        ("experiments/recording/webui/__init__.py", "대시보드 패키지 표시"),
         ("experiments/recording/webui/status.py", "대시보드가 보여 줄 상태 계산"),
         ("experiments/recording/webui/server.py", "대시보드 웹 서버"),
     ]},
