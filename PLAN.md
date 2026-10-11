@@ -16,10 +16,11 @@ M0·M1(합성 데이터)까지 이 저장소에 구현했다. 사용법은 [`REA
 - **완료:** 자동화 프로그램 `kdaa`(§4 단계·검사 게이트·증분 실행·리포트·`watch`), 세션 shard(§3 방식 B),
   CI(Linux 3.10/3.13 + Windows 3.12)
 - **e2e 테스트:** 합성 세션 3개로 녹음 → 학습 1 epoch → 평가 → 리포트까지 통과했다.
-- **임시 처리:**
-  - B1·B2(meligation)는 `kdaa/mel_shim.py`가 맡는다. 설정값이 같은지 검증한 뒤 classism 해시를 기록한다.
-  - classism 쪽 해시 검사와 shard 로딩은 `kdaa/classism_runner.py`가 classism을 감싸서 처리한다.
-  - 두 저장소에 정식으로 반영되면 걷어낸다.
+- **classism 반영:** 학습 데이터 param_hash 검사, 세션 shard 읽기, `data.sessions`/`data.on_missing_mel`/
+  `data.require_param_hash` 옵션을 classism에 넣었다(`regx64/classism` 브랜치 `claude/three-lineup-integration-plan-jkcqx2`,
+  submodule은 이 커밋을 가리킨다. classism main에 합쳐지면 submodule을 main으로 옮긴다).
+- **임시 처리:** B1·B2(meligation)는 `kdaa/mel_shim.py`가 맡는다. 설정값이 같은지 검증한 뒤 classism 해시를
+  기록한다. meligation에 정식으로 반영되면 걷어낸다.
 - **남은 것:**
   - 실제 녹음으로 하는 파일럿(M2, B3 onset 측정)
   - int8 export 실행 확인(TensorFlow 도구 필요)
@@ -198,7 +199,7 @@ S8 기록·리포트         run 디렉터리에 데이터 매니페스트 + 세
 ```
 kdaa-full-sample/
   third_party/{sound-autodaq, meligation, classism}   # submodule, 커밋 고정
-  kdaa/            # 오케스트레이터 (stages.py, mel_shim.py, pack.py, classism_runner.py, report.py, cli.py)
+  kdaa/            # 오케스트레이터 (stages.py, mel_shim.py, pack.py, report.py, cli.py)
   pipeline.yaml    # 경로, 게이트 임계값, classism config 오버라이드
   data/raw/        # sound-autodaq 출력 (git 제외)
   work/            # labels/ audio/ mel/ mel_packed/ state/ (git 제외)

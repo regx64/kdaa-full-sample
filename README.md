@@ -32,7 +32,7 @@ pip install -r requirements.txt
 | export | 완료된 세션을 검증하고 classism 형식으로 내보냄 (`--export-classism`) | `work/labels/<세션>.csv`, `work/audio/*.wav` |
 | mel | meligation으로 로그멜 추출 | `work/mel/<clip_id>.npy`, `_meta.json` |
 | pack | 세션별로 묶음 | `work/mel_packed/<세션>.npz` |
-| check | param_hash 검사, coverage, 세션 수 | `work/check.json` |
+| check | classism `src.dataset`: param_hash 검사, coverage / kdaa: 세션 수 | `work/check.json` |
 | train | classism 학습 | `runs/<id>/best.pt`, `split.json` |
 | evaluate | 보정 + 평가 | `runs/<id>/eval_test/`, `calibration.json` |
 | export_int8 | TFLite int8 (도구가 설치된 경우) | `runs/<id>/export/`, `handoff/mel_int8_input.json` |
@@ -48,14 +48,15 @@ pip install -r requirements.txt
   - session split에 세션이 3개 미만이면 멈춘다(`gates.min_sessions`).
   - coverage(자모별 25개)가 모자라면 학습은 하되 리포트에 "참고용"으로 표시한다(`gates.require_coverage: true`면 멈춤).
 
-## 임시 처리 (각 저장소에 반영되면 제거)
+## meligation 임시 처리 (meligation에 반영되면 제거)
 
-- **meligation (`kdaa/mel_shim.py`)**: `code` 파일을 경로로 불러오고, 설정값이 classism `Regime`과 항목별로 같은지
-  확인한 뒤 classism의 param_hash(`915acee6`)를 `_meta.json`에 기록한다. 값이 하나라도 다르면 멈춘다.
-  meligation 자체 해시가 classism과 같아지면 그대로 쓰고 이 처리는 아무것도 하지 않는다. (PLAN.md B1·B2)
-- **classism (`kdaa/classism_runner.py`)**: classism 코드는 그대로 두고, 실행 프로세스 안에서
-  `dataset.load_samples`/`LogMelDataset`를 바꿔 끼워 세션 shard 로딩·보류 세션 제외·param_hash 검사를 한다.
-  classism에 같은 기능이 들어가면 이 래퍼를 걷어낸다.
+`kdaa/mel_shim.py`가 meligation의 `code` 파일을 경로로 불러온다. 설정값이 classism `Regime`과 항목별로 같은지
+확인한 뒤 classism의 param_hash(`915acee6`)를 `_meta.json`에 기록하고, 값이 하나라도 다르면 멈춘다.
+meligation 자체 해시가 classism과 같아지면 그대로 쓰고 이 처리는 아무것도 하지 않는다. (PLAN.md B1·B2)
+
+classism은 직접 쓴다. 실행마다 `runs/<id>/classism_config.yaml`을 만들어 사용할 세션(`data.sessions`),
+Mel이 건너뛴 클립 제외(`data.on_missing_mel: drop`), param_hash 필수(`data.require_param_hash: true`)를 넘긴다.
+shard 읽기와 해시 검사는 classism `src/dataset.py`가 한다.
 
 ## 테스트
 

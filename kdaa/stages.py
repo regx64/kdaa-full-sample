@@ -17,6 +17,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 from . import __version__
 from .config import Config
 from .mel_shim import MelBackend, MelRegimeError, open_backend
@@ -114,17 +116,21 @@ class Pipeline:
                 logf.close()
         return rc, "\n".join(tail)
 
-    def _runner(self, command: str, sessions: list[Session], passthrough: list[str], *, out: Path | None = None,
-                log_path: Path | None = None) -> tuple[int, str]:
-        cmd = [self.python, "-m", "kdaa.classism_runner", command, "--classism", str(self.cfg.repo("classism")),
-               "--data", str(self.work), "--sessions", ",".join(s.uid for s in sessions)]
-        if command == "check" and self.cfg.classism_config():
-            cmd += ["--config", str(self.cfg.classism_config())]
-        if out:
-            cmd += ["--out", str(out)]
-        if passthrough:
-            cmd += ["--", *passthrough]
-        return self._call(cmd, cwd=KDAA_ROOT, log_path=log_path)
+    def _classism(self, module: str, args: list[str], *, log_path: Path | None = None,
+                  echo: bool = True) -> tuple[int, str]:
+        """`python -m <module> --data <work> ...` inside the classism checkout."""
+        return self._call([self.python, "-m", module, "--data", str(self.work), *args], cwd=self.cfg.repo("classism"),
+                          log_path=log_path, echo=echo)
+
+    def classism_config_text(self, sessions: list[Session]) -> str:
+        """The classism config for this data: the user's YAML (default classism's configs/afe.yaml) with the usable
+        sessions, label rows the Mel component skipped left out, and a param_hash required on every session."""
+        base_path = self.cfg.classism_config() or (self.cfg.repo("classism") / "configs" / "afe.yaml")
+        base = (yaml.safe_load(base_path.read_text(encoding="utf-8")) or {}) if base_path.exists() else {}
+        data = {**(base.get("data") or {}), "sessions": [s.uid for s in sessions], "on_missing_mel": "drop",
+                "require_param_hash": True}
+        return "# written by kdaa for this data; edit pipeline.yaml classism.config instead\n" + yaml.safe_dump(
+            {**base, "data": data}, allow_unicode=True, sort_keys=False)
 
     @property
     def backend(self) -> MelBackend:
@@ -190,11 +196,13 @@ class Pipeline:
 
     # ---- whole-dataset stages -----------------------------------------------------------------
     def stage_check(self, sessions: list[Session]) -> dict:
-        out = self.work / "check.json"
-        rc, tail = self._runner("check", sessions, [], out=out)
-        if rc == 3:
+        out, cfg_path = self.work / "check.json", self.work / "classism_config.yaml"
+        cfg_path.write_text(self.classism_config_text(sessions), encoding="utf-8")
+        out.unlink(missing_ok=True)
+        rc, tail = self._classism("src.dataset", ["--config", str(cfg_path), "--json", str(out)], echo=False)
+        if rc == 3:  # classism: param_hash mismatch (NFR-2)
             raise PipelineStop("check", tail.strip().splitlines()[-1] if tail.strip() else "param_hash mismatch", 1)
-        if rc != 0:
+        if rc not in (0, 1) or not out.exists():  # 1 = coverage short, judged below
             raise PipelineStop("check", f"classism check failed:\n{tail}", 1)
         chk = read_json(out)
         split = self.cfg["classism"]["split"] or chk["split"]
@@ -207,20 +215,19 @@ class Pipeline:
             raise PipelineStop("check", f"{split} split needs >= {need} {split}s, have {groups} "
                                         f"({', '.join(chk['sessions' if split == 'session' else 'participants'])})")
         if not chk["coverage_ok"]:
-            msg = f"coverage short in {chk['coverage_short_total']} (participant, symbol) cells"
+            msg = f"coverage short in {len(chk['coverage_short'])} (participant, symbol) cells"
             if self.cfg["gates"]["require_coverage"]:
                 raise PipelineStop("check", msg)
             self.log(f"  check: {msg} -> this run is marked reference-only")
+        dropped = f", {chk['dropped_no_mel']} rows without log-mel left out" if chk["dropped_no_mel"] else ""
         self.log(f"  check: {chk['n_samples']} clips, {len(chk['sessions'])} sessions, "
-                 f"param_hash {chk['param_hash']} ok")
+                 f"param_hash {chk['param_hash']} ok{dropped}")
         return chk
 
     def _datahash(self, sessions: list[Session], chk: dict) -> str:
-        c = self.cfg["classism"]
-        cfg_file = self.cfg.classism_config() or (self.cfg.repo("classism") / "configs" / "afe.yaml")
         return sha256_text(json.dumps(sorted((s.uid, s.state["pack"]["fp"]) for s in sessions)),
-                           sha256_files(cfg_file), json.dumps(c, sort_keys=True), self.commits["classism"],
-                           chk["param_hash"])[:8]
+                           self.classism_config_text(sessions), json.dumps(self.cfg["classism"], sort_keys=True),
+                           self.commits["classism"], chk["param_hash"])[:8]
 
     def _find_run(self, datahash: str) -> Path | None:
         if not self.runs.exists():
@@ -251,16 +258,15 @@ class Pipeline:
         }
         write_json(run / "run.json", manifest)
         shutil.copy2(self.work / "check.json", run / "check.json")
+        (run / "classism_config.yaml").write_text(self.classism_config_text(sessions), encoding="utf-8")
         c = self.cfg["classism"]
-        args = ["--out", str(run), "--device", str(c["device"])]
-        if self.cfg.classism_config():
-            args += ["--config", str(self.cfg.classism_config())]
+        args = ["--out", str(run), "--device", str(c["device"]), "--config", str(run / "classism_config.yaml")]
         if c["epochs"]:
             args += ["--epochs", str(c["epochs"])]
         if c["split"]:
             args += ["--split", c["split"]]
         self.log(f"  train -> {run}")
-        rc, tail = self._runner("train", sessions, args, log_path=run / "logs" / "train.log")
+        rc, tail = self._classism("src.train", args, log_path=run / "logs" / "train.log")
         if rc != 0 or not (run / "best.pt").exists():
             manifest["status"] = "failed"
             manifest["error"] = tail
@@ -268,13 +274,11 @@ class Pipeline:
             raise PipelineStop("train", f"classism train failed (log: {run / 'logs' / 'train.log'})", 1)
         return run, True
 
-    def stage_evaluate(self, sessions: list[Session], run: Path) -> dict:
+    def stage_evaluate(self, run: Path) -> dict:
         split = self.cfg["evaluate"]["split"]
-        args = ["--ckpt", str(run / "best.pt"), "--split", split]
-        if self.cfg.classism_config():
-            args += ["--config", str(self.cfg.classism_config())]
+        args = ["--ckpt", str(run / "best.pt"), "--split", split, "--config", str(run / "classism_config.yaml")]
         self.log(f"  evaluate ({split})")
-        rc, tail = self._runner("evaluate", sessions, args, log_path=run / "logs" / "evaluate.log")
+        rc, tail = self._classism("src.evaluate", args, log_path=run / "logs" / "evaluate.log")
         metrics = read_json(run / f"eval_{split}" / "metrics.json")
         if rc != 0 or metrics is None:
             raise PipelineStop("evaluate", f"classism evaluate failed (log: {run / 'logs' / 'evaluate.log'})", 1)
@@ -285,7 +289,7 @@ class Pipeline:
             EXPORT_MODULES,)
         return subprocess.run([self.python, "-c", probe], env=self._env()).returncode == 0
 
-    def stage_export_int8(self, sessions: list[Session], run: Path) -> dict:
+    def stage_export_int8(self, run: Path) -> dict:
         mode = self.cfg["export"]["enabled"]
         if mode is False:
             return {"status": "disabled"}
@@ -296,11 +300,9 @@ class Pipeline:
             self.log("  export_int8: toolchain not installed, skipped (export.enabled: auto)")
             return {"status": "skipped", "reason": "toolchain not installed"}
         out = run / "export"
-        args = ["--ckpt", str(run / "best.pt"), "--out", str(out)]
-        if self.cfg.classism_config():
-            args += ["--config", str(self.cfg.classism_config())]
+        args = ["--ckpt", str(run / "best.pt"), "--out", str(out), "--config", str(run / "classism_config.yaml")]
         self.log("  export_int8")
-        rc, _ = self._runner("export", sessions, args, log_path=run / "logs" / "export.log")
+        rc, _ = self._classism("src.export_esp32", args, log_path=run / "logs" / "export.log")
         deploy = read_json(out / "deployment.json")
         if rc != 0 or deploy is None:
             raise PipelineStop("export_int8", f"classism export failed (log: {run / 'logs' / 'export.log'})", 1)
@@ -350,9 +352,9 @@ class Pipeline:
                 return summary
             manifest = read_json(run / "run.json")
             if stop_after >= STAGES.index("evaluate"):
-                manifest["metrics_summary"] = summarize(self.stage_evaluate(usable, run))
+                manifest["metrics_summary"] = summarize(self.stage_evaluate(run))
             if stop_after >= STAGES.index("export_int8"):
-                manifest["export"] = self.stage_export_int8(usable, run)
+                manifest["export"] = self.stage_export_int8(run)
             manifest["status"] = "complete" if stop_after >= STAGES.index("report") else "partial"
             manifest["finished"] = _now()
             write_json(run / "run.json", manifest)

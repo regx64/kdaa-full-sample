@@ -2,6 +2,7 @@
 
 Shard arrays: logmel (N, n_mels, frames) float32 · clip_id (N,) str · param_hash · mel_spec_version · session_id.
 Clips whose .npy is missing (meligation skipped them, with the reason in mel/_skipped_<session>.csv) are left out.
+The reader is classism's `src.dataset` (shard layout in its module docstring); tests/test_pack.py checks the two agree.
 """
 from __future__ import annotations
 
@@ -68,36 +69,3 @@ def pack_session(work: Path, session_id: str, *, remove_clip_npy: bool = False) 
         for cid in have:
             (work / "mel" / f"{cid}.npy").unlink(missing_ok=True)
     return PackResult(session_id, len(ids), len(have), len(ids) - len(have), final)
-
-
-class ShardStore:
-    """All shards of the given sessions in memory: clip_id -> (n_mels, frames) float32."""
-
-    def __init__(self, packed_dir: Path, sessions: list[str], expected_hash: str | None = None):
-        self.index: dict[str, tuple[int, int]] = {}
-        self.blocks: list[np.ndarray] = []
-        self.hashes: dict[str, str] = {}
-        for sid in sessions:
-            path = packed_dir / f"{sid}.npz"
-            if not path.exists():
-                raise ShardError(f"shard {path} missing: run the pack stage")
-            with np.load(path, allow_pickle=False) as z:
-                logmel, ids, h = z["logmel"], z["clip_id"], str(z["param_hash"])
-            if expected_hash is not None and h != expected_hash:
-                raise ShardError(f"{path.name}: param_hash {h} != classism regime {expected_hash} (NFR-2); "
-                                 f"the mel was extracted with different parameters, re-run the mel stage")
-            self.hashes[sid] = h
-            b = len(self.blocks)
-            self.blocks.append(logmel)
-            for i, cid in enumerate(ids.tolist()):
-                self.index[cid] = (b, i)
-
-    def __contains__(self, clip_id: str) -> bool:
-        return clip_id in self.index
-
-    def __len__(self) -> int:
-        return len(self.index)
-
-    def get(self, clip_id: str) -> np.ndarray:
-        b, i = self.index[clip_id]
-        return self.blocks[b][i]

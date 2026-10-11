@@ -60,6 +60,9 @@ def test_record_to_report(tmp_path, capsys):
     assert doc["metrics_summary"]["n"] == 38 and doc["export"] == {"status": "disabled"}
     assert set(json.loads((run / "split.json").read_text())) >= {"train", "val", "test"}
     assert (run / "best.pt").exists() and (run / "eval_test" / "metrics.json").exists()
+    chk = read_json(run / "check.json")  # classism read the shards and verified their hash
+    assert sorted(chk["shard_sessions"]) == sorted([a, b, c]) and chk["param_hash"] == doc["param_hash"]
+    assert "require_param_hash: true" in (run / "classism_config.yaml").read_text(encoding="utf-8")
     assert "학습 리포트" in (run / "report.md").read_text(encoding="utf-8")
 
     # nothing new: no retraining, the run is reused
