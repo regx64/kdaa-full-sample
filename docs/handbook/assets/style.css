@@ -1,8 +1,3 @@
-<title>KDAA 개발자 핸드북</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
-<style>
 /* Layout: regx64.github.io detail-page grammar. A fixed blurred top bar, a plain hero, then chapters.
    Each chapter = big title + a monospace spec block, then rows of [sticky 14rem heading | 46rem body].
    One colour per repository, used for its chapter eyebrow, its boxes in diagrams and its table dots. */
@@ -70,7 +65,7 @@ a:hover { text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 4px; }
 ::selection { background: var(--mark); }
 code, kbd { font-family: var(--mono); font-size: 0.86em; }
-p code, li code, td code, dd code, h3 code { background: var(--bg-alt); padding: 0.08em 0.36em; border-radius: 0.3em; word-break: break-all; }
+p code, li code, td code, dd code, h3 code { background: var(--bg-alt); padding: 0.08em 0.36em; border-radius: 0.3em; overflow-wrap: anywhere; }
 kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 0.3em; padding: 0 0.35em; background: var(--bg); }
 
 /* ---- top bar ---------------------------------------------------------------------------------- */
@@ -245,4 +240,98 @@ svg .ah { fill: var(--muted); }
   .brand span { display: none; }
   .theme-btn { display: none; }
 }
-</style>
+
+/* ==== multi-page handbook additions ============================================================ */
+body { min-height: 100%; }
+.nav { top: env(safe-area-inset-top, 0px); }
+.plainpage, .codepage { padding: 0 var(--gutter) 5rem; }
+.page-head { padding: 4.5rem 0 2.5rem; border-bottom: 1px solid var(--line-strong); }
+.page-head .name { margin: 0 0 0.75rem; font-size: 1.1875rem; font-weight: 600; color: var(--muted); }
+.page-head h1 { margin: 0 0 1.25rem; font-size: clamp(2.25rem, 5vw, 3.75rem); line-height: 1.08; letter-spacing: -0.045em; text-wrap: balance; }
+.page-head .lede { max-width: 44rem; margin: 0; font-size: clamp(1.0625rem, 1.5vw, 1.25rem); line-height: 1.55; color: var(--muted); }
+.page-head + .doc-sec { border-top: 0; }
+
+/* file list */
+.repo { padding: 3rem 0 0; }
+.repo > h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.75rem; margin: 0 0 0.35rem; font-size: 1.5rem; letter-spacing: -0.03em; }
+.repo > h2 .dot { width: 0.75rem; height: 0.75rem; }
+.repo > h2 small { font-size: 0.8125rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.files { list-style: none; margin: 1rem 0 0; padding: 0; counter-reset: f; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; }
+.files li { counter-increment: f; min-width: 0; }
+.files a, .files li > div { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; align-items: baseline; padding: 0.75rem 0.9rem; border-radius: 0.9rem; background: var(--bg-alt); color: var(--ink); height: 100%; }
+.files a:hover { background: var(--hover); text-decoration: none; }
+.files a::before, .files li > div::before { content: counter(f); grid-row: span 2; font-family: var(--mono); font-size: 0.75rem; color: var(--c); }
+.files code { background: none; padding: 0; font-size: 0.85rem; font-weight: 600; word-break: break-all; }
+.files span { grid-column: 2 / 4; font-size: 0.8125rem; color: var(--muted); line-height: 1.45; }
+.files small { grid-column: 3; grid-row: 1; font-family: var(--mono); font-size: 0.7rem; color: var(--faint); white-space: nowrap; }
+.files .todo > div { opacity: 0.55; }
+
+/* annotated source */
+.codepage { --gutter: max(1rem, calc((100vw - 92rem) / 2)); }
+.file-head { padding: 3.5rem 0 2rem; }
+.file-title { margin: 0 0 0.6rem; font-family: var(--mono); font-size: clamp(1.4rem, 3vw, 2.1rem); letter-spacing: -0.02em; word-break: break-all; }
+.file-desc { margin: 0 0 0.75rem; font-size: 1.0625rem; color: var(--muted); }
+.howto { margin: 0; max-width: 46rem; font-size: 0.875rem; color: var(--faint); }
+.annotated { border-radius: 1rem; overflow: hidden; border: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row .src { background: #1D1D1F; min-width: 0; overflow-x: auto; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.row:first-child .src { border-top: 0; }
+.row .src pre { margin: 0; padding: 0.7rem 0; color: #E8E8ED; font-family: var(--mono); font-size: 0.78rem; line-height: 1.6; tab-size: 4; }
+.ln { display: block; padding: 0 1rem 0 0; white-space: pre; }
+.ln a { display: inline-block; width: 3.4em; padding-right: 1em; text-align: right; color: #6C7986; user-select: none; -webkit-user-select: none; }
+.ln a:hover { color: #E8E8ED; text-decoration: none; }
+.ln:target { background: rgba(255, 214, 10, 0.16); }
+.row .ex { padding: 0.85rem 1.25rem 1rem; font-size: 0.9375rem; line-height: 1.7; min-width: 0; background: var(--bg); }
+.row .ex p { margin: 0 0 0.6rem; }
+.row .ex ul { margin: 0 0 0.6rem; padding-left: 1.1rem; }
+.row .ex li { margin-bottom: 0.25rem; }
+.row .ex > :last-child { margin-bottom: 0; }
+.row .ex .lines { display: block; margin-bottom: 0.3rem; font-family: var(--mono); font-size: 0.7rem; color: var(--faint); }
+.row:target .ex { background: var(--mark); }
+a.cx { color: var(--link); border-bottom: 1px dotted var(--link); }
+a.cx:hover { text-decoration: none; border-bottom-style: solid; }
+.codepage .eyebrow { color: var(--c); }
+.codepage .eyebrow a { color: inherit; }
+.pager { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding-top: 2.5rem; }
+.pager a { display: flex; flex-direction: column; gap: 0.2rem; padding: 1.25rem 1.5rem; border-radius: 1.1rem; background: var(--bg-alt); color: var(--ink); font-family: var(--mono); font-size: 0.95rem; font-weight: 600; word-break: break-all; }
+.pager a:hover { background: var(--hover); text-decoration: none; }
+.pager a span { font-family: var(--sans); font-size: 0.78rem; font-weight: 500; color: var(--muted); }
+.pager .next { grid-column: 2; text-align: right; }
+
+/* syntax (code panel stays dark in both themes) */
+.src .k, .src .kn, .src .kc, .src .kd, .src .kr, .src .kp, .src .ow { color: #FC5FA3; }
+.src .s, .src .s1, .src .s2, .src .sb, .src .sc, .src .sh, .src .sx, .src .sr, .src .ss, .src .sa { color: #FC6A5D; }
+.src .sd { color: #8AA36A; }
+.src .si, .src .se { color: #FD8F3F; }
+.src .c, .src .c1, .src .ch, .src .cm, .src .cs, .src .cp { color: #7F8C98; font-style: italic; }
+.src .m, .src .mi, .src .mf, .src .mh, .src .mo, .src .mb, .src .il { color: #D0BF69; }
+.src .nf, .src .fm { color: #67B7A4; }
+.src .nc, .src .nn { color: #5DD8FF; }
+.src .nb, .src .bp { color: #A167E6; }
+.src .nd { color: #FD8F3F; }
+.src .ne { color: #5DD8FF; }
+
+/* python primer */
+.concepts { display: grid; gap: 0; }
+.concept { display: grid; grid-template-columns: 14rem minmax(0, 46rem); gap: 2.5rem; padding: 2.5rem 0; border-top: 1px solid var(--line); }
+.concept > h2 { margin: 0; font-size: 1.125rem; letter-spacing: -0.02em; align-self: start; position: sticky; top: 4.25rem; }
+.concept > h2 small { display: block; margin-top: 0.3rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+.concept > div { min-width: 0; }
+.concept p { margin: 0 0 0.9rem; line-height: 1.75; }
+.concept .code { margin: 0.9rem 0; }
+.concept > div > :last-child { margin-bottom: 0; }
+.concept:target > h2 { color: var(--link); }
+.group-title { margin: 3.5rem 0 0; padding-bottom: 0.5rem; font-size: 0.8125rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+
+@media (max-width: 1068px) {
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .row .ex { border-top: 0; }
+  .files { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 834px) {
+  .concept { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; padding: 2rem 0; }
+  .concept > h2 { position: static; }
+  .pager { grid-template-columns: minmax(0, 1fr); }
+  .pager .next { grid-column: auto; }
+}

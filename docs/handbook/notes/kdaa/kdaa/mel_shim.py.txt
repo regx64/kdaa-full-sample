@@ -1,0 +1,76 @@
+sha: d986a6bd5753
+@@ 1-10
+이 파일은 meligation 저장소의 두 문제를 meligation을 고치지 않고 우회하는 **임시** 코드입니다(shim = 끼움쇠). meligation은 다른 사람이 작업 중이라 kdaa 쪽에서 맞춥니다.
+
+- **B2**: meligation의 소스는 확장자 없는 `code` 파일 하나라서 `import`가 안 됩니다. 경로로 직접 불러옵니다.
+- **B1**: 로그멜 규격 지문(param_hash)을 만들 때 meligation과 classism이 필드 이름을 다르게 써서, 값이 같은데도 지문이 다릅니다(meligation `5711c12b`, classism `915acee6`). 그래서 값을 하나하나 비교해 모두 같을 때만 classism 지문을 대신 기록합니다. 값이 하나라도 다르면 진짜로 규격이 다른 것이므로 멈춥니다.
+
+meligation이 고쳐져서 지문이 같아지면 이 파일은 아무것도 하지 않게 됩니다. 로그멜을 만드는 계산 자체는 meligation 코드 그대로입니다.
+@@ 11
+[[future-annotations|from __future__ import annotations]].
+@@ 13-17
+[[dataclass]], [[pathlib|Path]], 모듈 타입 이름, 그리고 {{kdaa:kdaa/util.py|util.py}}의 도구들(모듈 불러오기, 해시, JSON 저장)을 가져옵니다.
+@@ 19
+meligation 소스 파일 후보 이름입니다. 앞에 있는 것을 먼저 찾습니다. 나중에 meligation이 파일 이름을 `mel_build.py`로 바꾸면 자동으로 그쪽을 씁니다.
+@@ 22-23
+"meligation과 classism의 규격 값이 다르다"를 나타내는 [[exceptions|예외]] 종류입니다. 내용 없이 독스트링만 있어도 클래스가 됩니다. 이름으로 구분하는 것이 목적이라 이걸로 충분합니다.
+@@ 26-30
+meligation 저장소에서 소스 파일을 찾습니다. 후보 이름을 차례로 보며 파일이 있으면 그 경로를 돌려주고, 하나도 없으면 에러를 냅니다. 에러 메시지에는 찾아본 이름들을 `" / "`로 이어 보여 줍니다. 서브모듈을 받지 않았을 때 이 에러가 납니다.
+@@ 33-34
+불러올 모듈에 붙일 이름을 만듭니다. 예: `kdaa_meligation_1a2b3c4d`. 뒤의 8글자는 파일 절대 경로의 해시입니다. 서로 다른 폴더의 meligation을 불러와도(테스트에서 일부러 바꾼 사본을 쓰는 경우) 이름이 겹치지 않게 하려는 것입니다.
+@@ 37-39
+meligation 소스를 찾아 모듈로 불러옵니다({{kdaa:kdaa/util.py:45|load_module}}). 이후 `mod.MelExtractor`, `mod.Regime`처럼 meligation의 클래스를 꺼내 쓸 수 있습니다.
+@@ 42-45
+classism의 `src/melio.py` 파일 하나만 불러옵니다. 여기에 classism의 로그멜 규격(`REGIME`)이 정의돼 있습니다. classism 전체를 불러오면 PyTorch까지 따라와 무거운데, `melio.py`는 다른 classism 파일에 의존하지 않아 혼자 불러올 수 있습니다(독스트링 설명).
+@@ 48-49
+meligation 규격(`mel`)과 classism 규격(`cls`)의 값을 비교해, 다른 항목의 설명 목록을 돌려줍니다. 빈 목록이면 모두 같다는 뜻입니다.
+@@ 50-62
+비교할 쌍을 (이름, meligation 값, classism 값)으로 나열합니다. 같은 뜻인데 이름이 다른 필드를 짝지어 줍니다.
+
+- `win_length` ↔ `win_samples`: 창 길이 384샘플(8 ms)
+- `hop_length` ↔ `hop_samples`: 이동 간격 96샘플(2 ms)
+- meligation의 `pre_ms`(5) ↔ classism의 `onset_pre_ms`(5): 타건 앞 여유
+- meligation의 `pre_ms + post_ms`(5 + 95) ↔ classism의 `clip_ms`(100): 자를 길이
+
+실수 값은 `float(...)`로 맞춰 비교합니다. 한쪽은 `5`(정수), 다른 쪽은 `5.0`(실수)이어도 같게 보기 위해서입니다.
+@@ 63
+다른 쌍만 골라 "이름: meligation 값 != classism 값" 글자로 만듭니다([[comprehension|리스트 컴프리헨션]]). 튜플 세 개를 `name, a, b`로 풀어 받습니다. `!r`은 값을 따옴표까지 보이게 출력하는 [[fstring|서식]]입니다.
+@@ 64-68
+meligation은 정규화(클립별 z-score)와 숫자 형식(float32)을 코드 안에 고정해 두었으므로 필드가 없습니다. 그래서 classism 쪽 값이 그와 같은지만 확인합니다.
+@@ 69
+차이 목록을 돌려줍니다.
+@@ 72-78
+meligation을 쓰는 데 필요한 것을 한데 묶은 [[dataclass]]입니다.
+
+- `mod`: 불러온 meligation 모듈.
+- `source`: 소스 파일 경로.
+- `param_hash`: classism이 받아들일 지문(실제로 기록할 값).
+- `own_hash`: meligation이 스스로 계산한 지문.
+- `hash_source`: 기록할 지문을 누가 정했는지. `"meligation"`(원래부터 같음) 또는 `"kdaa-shim"`(kdaa가 대신 맞춤).
+@@ 80-82
+meligation 소스 파일 내용의 지문입니다([[property]]). meligation 코드가 바뀌면 이 값이 바뀌고, {{kdaa:kdaa/stages.py:172|stages.py}}가 이를 보고 로그멜을 다시 만듭니다.
+@@ 84-89
+`work/mel/_meta.json`에 쓸 내용입니다. classism은 이 파일의 `param_hash`를 보고 로그멜이 맞는 규격으로 만들어졌는지 확인합니다.
+
+- `mel_spec_version`, `sample_rate`, `n_mels`, `frames`: meligation의 값.
+- `param_hash`: classism 지문.
+- `regime`: meligation 규격 전체(`canonical_dict()`가 딕셔너리로 돌려줌).
+- `meligation_param_hash`, `param_hash_source`: 지문을 kdaa가 대신 맞췄다는 기록.
+@@ 91-92
+세션 하나의 로그멜을 만드는 메서드입니다. 돌려주는 값은 (CSV 행 수, 만든 수, 건너뛴 목록).
+@@ 93
+meligation의 로그멜 추출기 객체를 만듭니다. 규격 객체(`Regime()`, 기본값)를 넘겨 줍니다.
+@@ 94
+meligation의 `build_session` 함수를 부릅니다. CSV를 읽어 행마다 WAV를 자르고 로그멜을 `work/mel/<clip_id>.npy`로 저장합니다. 입력 폴더와 출력 폴더를 둘 다 `work`로 줍니다. 돌려받는 넷 중 첫 번째(세션 이름)는 쓰지 않으므로 `_`로 받습니다([[unpacking|풀어 쓰기]]).
+@@ 95-96
+`_meta.json`을 위의 내용으로 씁니다. meligation도 `main` 함수에서 이 파일을 쓰지만 kdaa는 `build_session`만 부르므로 여기서 직접 씁니다. 그리고 세 값을 돌려줍니다.
+@@ 99
+meligation 연결 객체를 만드는 함수입니다. {{kdaa:kdaa/stages.py:136|stages.py}}가 처음 Mel 단계를 할 때 부릅니다.
+@@ 100-102
+meligation 모듈과 classism 규격을 불러오고, 양쪽 지문을 계산합니다. `own`은 meligation 것, `want`는 classism 것입니다.
+@@ 103-104
+같으면(meligation이 고쳐진 뒤) 그대로 씁니다. 출처는 `"meligation"`.
+@@ 105-107
+다르면 값을 비교합니다. 다른 값이 하나라도 있으면 에러로 멈춥니다. 메시지에는 다른 항목을 한 줄씩 들여 써서 보여 줍니다.
+@@ 108
+값은 모두 같고 이름만 다른 경우입니다. classism 지문(`want`)을 기록하도록 연결 객체를 만들고, 출처를 `"kdaa-shim"`으로 표시합니다.

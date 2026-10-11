@@ -1,0 +1,102 @@
+<section class="hero" id="top">
+  <p class="name">KDAA 코드 읽기</p>
+  <h1>네 저장소의 코드를 한 줄씩.</h1>
+  <p class="lede">키보드 소리로 한글 입력을 알아내는 KDAA 파이프라인의 코드를 처음부터 끝까지 설명합니다. 파이썬 기초 문법(변수, if, for, 함수, 리스트, 딕셔너리)만 알면 읽을 수 있게 썼습니다. 원리는 이 페이지에서 짧게 보고, 나머지는 코드 옆에 붙은 설명으로 익힙니다.</p>
+  <p class="meta">코드 기준 · kdaa-full-sample faf2c4d · sound-autodaq c0823bd · meligation 7acb1bd · classism 386d918</p>
+  <ul class="repo-grid">
+    <li><a href="code.html#kdaa" class="k-kdaa"><b><i class="dot"></i>kdaa</b><span>나머지 셋을 순서대로 실행하는 자동화</span><code>875줄</code></a></li>
+    <li><a href="code.html#rec" class="k-rec"><b><i class="dot"></i>sound-autodaq</b><span>타건 하나마다 WAV 하나를 녹음</span><code>5,241줄</code></a></li>
+    <li><a href="code.html#mel" class="k-mel"><b><i class="dot"></i>meligation</b><span>WAV를 로그멜(소리 그림)로 변환</span><code>283줄</code></a></li>
+    <li><a href="code.html#afe" class="k-afe"><b><i class="dot"></i>classism</b><span>로그멜을 38개 기호로 분류하는 모델</span><code>1,874줄</code></a></li>
+  </ul>
+</section>
+
+<main class="plainpage">
+
+<section class="doc-sec" id="how">
+  <h2>이 안내서 쓰는 법</h2>
+  <div>
+    <ol class="numbered">
+      <li>아래 <a href="#idea">원리 5분</a>을 읽습니다. 프로그램이 무엇을 하는지 감을 잡는 정도면 됩니다.</li>
+      <li><a href="python.html">코드 읽기 전 파이썬</a>을 훑어봅니다. 다 외울 필요는 없고, 무엇이 있는지만 봐 두세요.</li>
+      <li><a href="code.html">파일 목록</a>에서 저장소 하나를 골라 위에서부터 읽습니다. 처음이라면 kdaa → meligation → classism → sound-autodaq 순서를 권합니다. kdaa가 가장 짧고 나머지 셋을 어떻게 부르는지 보여 주기 때문입니다.</li>
+      <li>코드 페이지는 왼쪽이 코드, 오른쪽이 설명입니다. 설명 속 <a class="cx" href="python.html#py-dataclass">밑줄 단어</a>는 파이썬 개념 설명으로 갑니다.</li>
+      <li>형식과 설정 값을 찾을 때는 <a href="reference.html">참조</a>를 봅니다.</li>
+    </ol>
+    <p class="note">오른쪽 위 검색창(<kbd>/</kbd>)으로 함수 이름이나 낱말을 찾으면 그 설명이 있는 줄로 바로 갑니다.</p>
+  </div>
+</section>
+
+<section class="doc-sec" id="idea">
+  <h2>원리 5분</h2>
+  <div>
+    <h3>무엇을 하나</h3>
+    <p>키보드는 키마다 위치와 구조가 조금씩 달라서 누를 때 나는 소리도 조금씩 다릅니다. 그 차이를 학습한 프로그램에게 타건 소리를 들려주면 어떤 키였는지 추측할 수 있습니다. 이걸 "음향 사이드채널 공격"이라고 하고, KDAA는 이를 한글 두벌식 자판에 적용하는 연구입니다.</p>
+    <h3>소리를 그림으로</h3>
+    <p>소리 파일은 1초에 48,000개의 숫자(진폭)입니다. 이대로는 키를 구별하기 어려워서, 타건 순간 앞뒤 0.1초만 잘라 "시간마다 어느 높이의 소리가 얼마나 센가"를 표로 만듭니다. 세로 64칸(소리 높이, mel 대역) × 가로 48칸(시간)짜리 표이고, 이것을 <b>로그멜</b>이라고 부릅니다. 흑백 그림 한 장이라고 생각하면 됩니다.</p>
+    <h3>그림을 기호로</h3>
+    <p>CNN(합성곱 신경망)은 그림에서 무늬를 찾는 데 강한 모델입니다. 로그멜 그림을 넣으면 38개 기호(자모 33개 + Space, Backspace, Shift, CapsLock, 기타) 각각에 점수를 매기고, 이를 확률로 바꿔 상위 5개를 내놓습니다. "ㄱ일 확률 72%, ㄷ 16%, …"처럼요. 이 후보들로 문장을 복원하는 일은 다른 팀의 LM 서버가 맡고, 이 네 저장소에는 없습니다.</p>
+    <h3>학습하려면</h3>
+    <p>모델이 배우려면 "이 소리는 ㄱ이었다"는 정답이 붙은 소리가 많이 필요합니다. 그래서 sound-autodaq가 화면에 "ㄱ을 누르세요"를 띄우고, 누른 키를 키보드 훅으로 확인하고, 그 순간의 소리를 저장합니다. 이렇게 모은 수만 개의 소리를 meligation이 로그멜로 바꾸고, classism이 그걸로 모델을 학습합니다. kdaa는 이 과정을 명령 하나로 이어 줍니다.</p>
+    <figure class="chart">
+      <svg viewBox="0 0 760 132" role="img" aria-label="소리가 WAV, 로그멜, 모델, 확률을 거쳐 리포트가 되는 흐름">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <g class="k-rec"><rect x="10" y="30" width="136" height="72" rx="10" class="bx-c"/><text x="22" y="54" class="t1">녹음</text><text x="22" y="72" class="tc">sound-autodaq</text><text x="22" y="90" class="t2">타건 1회 = WAV 1개</text></g>
+        <g class="k-mel"><rect x="160" y="30" width="136" height="72" rx="10" class="bx-c"/><text x="172" y="54" class="t1">소리 → 그림</text><text x="172" y="72" class="tc">meligation</text><text x="172" y="90" class="t2">0.1초 → 64×48 표</text></g>
+        <g class="k-kdaa"><rect x="310" y="30" width="136" height="72" rx="10" class="bx-c"/><text x="322" y="54" class="t1">묶기·검사</text><text x="322" y="72" class="tc">kdaa</text><text x="322" y="90" class="t2">세션별 파일 하나</text></g>
+        <g class="k-afe"><rect x="460" y="30" width="136" height="72" rx="10" class="bx-c"/><text x="472" y="54" class="t1">학습·평가</text><text x="472" y="72" class="tc">classism</text><text x="472" y="90" class="t2">그림 → 38개 확률</text></g>
+        <g class="k-kdaa"><rect x="610" y="30" width="140" height="72" rx="10" class="bx-c"/><text x="622" y="54" class="t1">리포트</text><text x="622" y="72" class="tc">kdaa</text><text x="622" y="90" class="t2">정확도, 이전과 비교</text></g>
+        <path d="M148 66H158" class="ln" marker-end="url(#ah)"/><path d="M298 66H308" class="ln" marker-end="url(#ah)"/><path d="M448 66H458" class="ln" marker-end="url(#ah)"/><path d="M598 66H608" class="ln" marker-end="url(#ah)"/>
+      </svg>
+      <figcaption>상자 색은 그 일을 하는 저장소. 저장소끼리는 함수를 부르지 않고 파일을 주고받습니다</figcaption>
+    </figure>
+    <h3>꼭 기억할 두 가지</h3>
+    <ul class="plain">
+      <li><b>학습 때와 실제 사용 때 로그멜을 똑같이 만들어야 합니다.</b> 조금만 달라도 에러 없이 정확도만 떨어집니다. 그래서 만드는 방법(파라미터)을 해시라는 짧은 지문(<code>915acee6</code>)으로 만들어 서로 확인합니다.</li>
+      <li><b>세션 단위로 나눠서 시험합니다.</b> 같은 녹음 세션의 소리를 학습과 시험에 섞으면 그 방의 소음까지 외워서 성적이 부풀려집니다.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="doc-sec" id="setup">
+  <h2>준비와 첫 실행</h2>
+  <div>
+    <p>아래 명령을 터미널에 차례로 입력합니다. Windows라면 PowerShell에서 하고, 주석(<code>#</code> 뒤)에 Windows용 명령을 적었습니다.</p>
+    <div class="code"><span class="label">bash</span><pre>git clone --recurse-submodules https://github.com/regx64/kdaa-full-sample
+cd kdaa-full-sample
+python -m venv .venv                 <span class="c"># 이 프로젝트 전용 파이썬 환경 만들기</span>
+source .venv/bin/activate            <span class="c"># Windows: .venv\Scripts\activate</span>
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+python -m pytest -q                  <span class="c"># 테스트 10개. "10 passed"가 나오면 준비 끝 (약 1분)</span></pre></div>
+    <p><code>--recurse-submodules</code>는 나머지 세 저장소를 <code>third_party/</code> 아래에 함께 받으라는 뜻입니다. 빠뜨렸다면 <code>git submodule update --init</code>를 실행하세요. 마지막 테스트 중 <code>tests/test_e2e.py</code>는 가짜 녹음 세션 3개를 만들어 녹음부터 리포트까지 전부 돌려 봅니다.</p>
+    <div class="code"><span class="label">bash</span><pre>python -m pytest -q tests/test_e2e.py --basetemp=./tmp-e2e   <span class="c"># 결과 파일을 tmp-e2e에 남겨 열어 보기</span>
+python -m kdaa status            <span class="c"># 실제 데이터가 있으면 세션별 상태</span></pre></div>
+  </div>
+</section>
+
+<section class="doc-sec" id="words">
+  <h2>먼저 알아 둘 낱말</h2>
+  <div>
+    <dl class="pairs">
+      <dt>세션 (session)</dt><dd>녹음 한 번. 참가자·시나리오·세션 번호로 이름이 붙습니다(예: <code>P01_S01_SESSION01</code>).</dd>
+      <dt>trial</dt><dd>"이 키를 한 번 누르세요" 한 번. 성공하면 WAV 파일 하나가 생깁니다.</dd>
+      <dt>clip_id</dt><dd>학습 데이터에서 타건 하나의 이름. <code>세션이름_trial번호8자리</code>.</dd>
+      <dt>onset</dt><dd>타건이 시작된 순간. 여기서 앞 5 ms, 뒤 95 ms를 잘라 씁니다.</dd>
+      <dt>로그멜 (log-mel)</dt><dd>소리 0.1초를 64×48 숫자 표로 바꾼 것.</dd>
+      <dt>param_hash</dt><dd>로그멜 만드는 방법의 지문. 다르면 학습을 거부합니다.</dd>
+      <dt>shard</dt><dd>세션 하나의 로그멜을 모두 담은 <code>.npz</code> 파일 하나.</dd>
+      <dt>epoch</dt><dd>학습 데이터 전체를 한 번 훑는 것.</dd>
+      <dt>top-5 정확도</dt><dd>정답이 확률 상위 5개 안에 든 비율.</dd>
+    </dl>
+  </div>
+</section>
+
+<section class="doc-sec" id="files">
+  <h2>파일 목록</h2>
+  <div>
+    <p>저장소마다 읽는 순서대로 놓았습니다. 설명이 끝난 파일만 링크가 걸려 있습니다.</p>
+  </div>
+</section>
+<!--FILES-->
+</main>
